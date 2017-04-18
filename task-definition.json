@@ -1,0 +1,25 @@
+{
+    "networkMode": "bridge",
+    "containerDefinitions": [
+        {
+            "memory": 300,
+            "portMappings": [
+                {
+                    "hostPort": 8000,
+                    "containerPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "entryPoint": [
+                "/entrypoint.sh"
+            ],
+            "name": "sample-app",
+            "image": "800532562975.dkr.ecr.eu-central-1.amazonaws.com/flash-cards:latest",
+            "cpu": 10
+        }
+    ],
+    "placementConstraints": [],
+    "volumes": [],
+    "family": "console-sample-app-static"
+}

@@ -12,6 +12,9 @@
                 <label for="code" class="btn btn-default btn-lg">Code &nbsp;
                     <input type="radio" name="type" value="2" id="code" {{ "checked" if (card.type == 2) else "" }} />
                 </label>
+                <label for="code" class="btn btn-default btn-lg">Skipped &nbsp;
+                    <input type="radio" name="type" value="9" id="code" {{ "checked" if (card.type == 9) else "" }} />
+                </label>
             </div>
             <div class="form-group">
                 <label for="front">Front of Card</label>

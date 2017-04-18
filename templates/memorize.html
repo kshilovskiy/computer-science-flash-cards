@@ -79,6 +79,9 @@
                 <i class="fa fa-check"></i>
                 I Know It
             </a>
+            <a href="{{ url_for('mark_skipped', card_id=card.id, card_type=card_type) }}" class="btn btn-danger btn-lg">
+                Skip
+            </a>
             &nbsp;
             &nbsp;
             <a href="{{ url_for(card_type) }}" class="btn btn-primary btn-lg">

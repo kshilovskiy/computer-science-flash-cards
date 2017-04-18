@@ -87,6 +87,7 @@ def filter_cards(filter_name):
         "all":      "where 1 = 1",
         "general":  "where type = 1",
         "code":     "where type = 2",
+        "skipped":  "where type = 9",
         "known":    "where known = 1",
         "unknown":  "where known = 0",
     }
@@ -252,6 +253,16 @@ def mark_known(card_id, card_type):
     db.execute('UPDATE cards SET known = 1 WHERE id = ?', [card_id])
     db.commit()
     flash('Card marked as known.')
+    return redirect(url_for(card_type))
+
+@app.route('/mark_skipped/<card_id>/<card_type>')
+def mark_skipped(card_id, card_type):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    db = get_db()
+    db.execute('UPDATE cards SET type = 9 WHERE id = ?', [card_id])
+    db.commit()
+    flash('Card marked as skipped.')
     return redirect(url_for(card_type))
 
 
