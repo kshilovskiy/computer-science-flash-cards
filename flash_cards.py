@@ -2,6 +2,8 @@ import os
 import sqlite3
 from flask import Flask, request, session, g, redirect, url_for, abort, \
     render_template, flash
+import psycopg2
+import psycopg2.extras
 
 app = Flask(__name__)
 app.config.from_object(__name__)
@@ -14,28 +16,29 @@ app.config.update(dict(
     PASSWORD='default'
 ))
 app.config.from_envvar('CARDS_SETTINGS', silent=True)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 
 def connect_db():
-    rv = sqlite3.connect(app.config['DATABASE'])
-    rv.row_factory = sqlite3.Row
-    return rv
+    conn = psycopg2.connect("dbname='cards_local' host='localhost'")
 
-
-def init_db():
-    db = get_db()
-    with app.open_resource('data/schema.sql', mode='r') as f:
-        db.cursor().executescript(f.read())
-    db.commit()
-
-
+    return conn
+#
+#
+# def init_db():
+#     db = get_db()
+#     with app.open_resource('data/schema.sql', mode='r') as f:
+#         db.cursor().executescript(f.read())
+#     db.commit()
+#
+#
 def get_db():
     """Opens a new database connection if there is none yet for the
     current application context.
     """
     if not hasattr(g, 'sqlite_db'):
-        g.sqlite_db = connect_db()
-    return g.sqlite_db
+        g.sql_db = connect_db()
+    return g.sql_db
 
 
 @app.teardown_appcontext
@@ -68,12 +71,13 @@ def cards():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     query = '''
         SELECT id, type, front, back, known
         FROM cards
         ORDER BY id DESC
     '''
-    cur = db.execute(query)
+    cur.execute(query)
     cards = cur.fetchall()
     return render_template('cards.html', cards=cards, filter_name="all")
 
@@ -88,8 +92,8 @@ def filter_cards(filter_name):
         "general":  "where type = 1",
         "code":     "where type = 2",
         "skipped":  "where type = 9",
-        "known":    "where known = 1",
-        "unknown":  "where known = 0",
+        "known":    "where known = true",
+        "unknown":  "where known = false",
     }
 
     query = filters.get(filter_name)
@@ -98,8 +102,9 @@ def filter_cards(filter_name):
         return redirect(url_for('cards'))
 
     db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     fullquery = "SELECT id, type, front, back, known FROM cards " + query + " ORDER BY id DESC"
-    cur = db.execute(fullquery)
+    cur.execute(fullquery)
     cards = cur.fetchall()
     return render_template('cards.html', cards=cards, filter_name=filter_name)
 
@@ -109,7 +114,8 @@ def add_card():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
-    db.execute('INSERT INTO cards (type, front, back) VALUES (?, ?, ?)',
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute('INSERT INTO cards (type, front, back) VALUES (%s, %s, %s)',
                [request.form['type'],
                 request.form['front'],
                 request.form['back']
@@ -124,13 +130,14 @@ def edit(card_id):
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     query = '''
         SELECT id, type, front, back, known
         FROM cards
-        WHERE id = ?
+        WHERE id = %s
     '''
-    cur = db.execute(query, [card_id])
-    card = cur.fetchone()
+    cur.execute(query, [card_id])
+    card = db.fetchone()
     return render_template('edit.html', card=card)
 
 
@@ -141,16 +148,17 @@ def edit_card():
     selected = request.form.getlist('known')
     known = bool(selected)
     db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     command = '''
         UPDATE cards
         SET
-          type = ?,
-          front = ?,
-          back = ?,
-          known = ?
-        WHERE id = ?
+          type = %s,
+          front = %s,
+          back = %s,
+          known = %s
+        WHERE id = %s
     '''
-    db.execute(command,
+    cur.execute(command,
                [request.form['type'],
                 request.form['front'],
                 request.form['back'],
@@ -167,7 +175,8 @@ def delete(card_id):
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
-    db.execute('DELETE FROM cards WHERE id = ?', [card_id])
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute('DELETE FROM cards WHERE id = %s', [card_id])
     db.commit()
     flash('Card deleted.')
     return redirect(url_for('cards'))
@@ -213,35 +222,35 @@ def memorize(card_type, card_id):
 
 def get_card(type):
     db = get_db()
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    query = '''
+    query = """
       SELECT
         id, type, front, back, known
       FROM cards
-      WHERE
-        type = ?
-        and known = 0
+      WHERE type = %s AND known = false
       ORDER BY RANDOM()
       LIMIT 1
-    '''
+    """
 
-    cur = db.execute(query, [type])
+    cur.execute(query, (type,))
+
     return cur.fetchone()
 
 
 def get_card_by_id(card_id):
     db = get_db()
-
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     query = '''
       SELECT
         id, type, front, back, known
       FROM cards
       WHERE
-        id = ?
+        id = %s
       LIMIT 1
     '''
 
-    cur = db.execute(query, [card_id])
+    cur.execute(query, [card_id])
     return cur.fetchone()
 
 
@@ -250,7 +259,8 @@ def mark_known(card_id, card_type):
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
-    db.execute('UPDATE cards SET known = 1 WHERE id = ?', [card_id])
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute('UPDATE cards SET known = 1 WHERE id = %s', [card_id])
     db.commit()
     flash('Card marked as known.')
     return redirect(url_for(card_type))
@@ -260,8 +270,12 @@ def mark_skipped(card_id, card_type):
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     db = get_db()
-    db.execute('UPDATE cards SET type = 9 WHERE id = ?', [card_id])
+    cur = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cur.execute('UPDATE cards SET type = 9 WHERE id = %s', [card_id])
+
     db.commit()
+
     flash('Card marked as skipped.')
     return redirect(url_for(card_type))
 
